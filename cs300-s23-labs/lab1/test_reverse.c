@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
 #include "reverse.h"
 
 static int total_tests = 0;
@@ -27,22 +28,22 @@ void assert_equal(char** expected, char** actual, const char* message,
     } else {
       element_incorrect++;
       if (element_correct == len) num_incorrect++;
-      printf("\033[0;31m"); //set color to red
+      printf("\033[0;31m");  // set color to red
       printf(
           "[FAILED Test %d: %s]: At index: %d, expected string: %s, actual "
           "string: %s\n",
           total_tests, message, i, expected[i], actual[i]);
-      printf("\033[0m"); //reset text to default color
+      printf("\033[0m");  // reset text to default color
     }
   }
 
-  //If no elements are wrong, the test passed! Print a message that says this :)
-  if (element_incorrect == 0){
-    printf("\033[0;32m"); //set color to green
+  // If no elements are wrong, the test passed! Print a message that says this
+  // :)
+  if (element_incorrect == 0) {
+    printf("\033[0;32m");  // set color to green
     printf("[PASSED Test %d: %s]\n", total_tests, message);
-    printf("\033[0m"); //reset text to default color
+    printf("\033[0m");  // reset text to default color
   }
-
 }
 
 /**
@@ -128,7 +129,18 @@ void run_test(void (*func)(), const char* message) {
  * i.e. argv[1] --> number of elements, thus argc - 2 == atoi(argv[1])
  */
 int main(int argc, char** argv) {
+  if (argc == 1) {
+    printf("Testing for correctness...\n");
+    // passes the function test_reverse to run_test
+    run_test(&test_reverse, "Reverse");
+    return 0;
+  }
+
   int num_elements = atoi(argv[1]);
+
+  if (num_elements != argc - 2) {
+    return 1;
+  }
 
   char* arr[num_elements];
   for (int i = 0; i < num_elements; i++) {

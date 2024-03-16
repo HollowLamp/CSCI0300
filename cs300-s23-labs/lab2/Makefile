@@ -1,4 +1,4 @@
-CFLAGS = -Wall -Wextra
+CFLAGS = -Wall -Wextra -fsanitize=address
 CFLAGS += -g
 .PHONY: all clean format
 
