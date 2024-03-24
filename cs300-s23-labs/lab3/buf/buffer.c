@@ -12,7 +12,7 @@ void hack() {
 
 void foo() {
     // stack allocate some variables
-    const int fav_number = 12; // your favorite number is a constant so it can't change
+    const int fav_number = 13; // your favorite number is a constant so it can't change
     char buf[BUFSIZE];
 
     // print favorite number

@@ -8,6 +8,8 @@
 int g_game_over;
 int g_score;
 
+int g_name_len;
+char* g_name;
 /** Sets the seed for random number generation.
  * Arguments:
  *  - `seed`: the seed.

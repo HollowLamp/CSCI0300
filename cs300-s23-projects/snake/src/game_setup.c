@@ -73,8 +73,27 @@ enum board_init_status initialize_game(int** cells_p, size_t* width_p,
                                        size_t* height_p, snake_t* snake_p,
                                        char* board_rep) {
     // TODO: implement!
+    enum board_init_status ret;
+    snake_p->head_pos = (node_t*)malloc(sizeof(node_t));
+    if(board_rep) {
+        ret = decompress_board_str(cells_p, width_p, height_p, snake_p, board_rep);
+    }   else{ 
+        ret = initialize_default_board(cells_p, width_p, height_p);
+        int* data = malloc(sizeof(int));
+        *data = 42;
+        snake_p->head_pos->data = data;
+        snake_p->head_pos->next = NULL;
+        snake_p->head_pos->prev = NULL;
+    }
+    if(ret != INIT_SUCCESS){
+        return ret;
+    }
+    snake_p->snake_dir = INPUT_RIGHT;
+    place_food(*cells_p, *width_p, *height_p);
+    g_game_over = 0;
+    g_score = 0;
 
-    return INIT_SUCCESS;
+    return ret;
 }
 
 /** Takes in a string `compressed` and initializes values pointed to by
@@ -90,9 +109,117 @@ enum board_init_status initialize_game(int** cells_p, size_t* width_p,
  * (delineated by the `|` character), and read out a letter (E, S or W) a number
  * of times dictated by the number that follows the letter.
  */
+void helper(snake_t* snake_p, int width, char* line,  int* Snum, int* wwrong, int* unknown, int* cells_p, int row, int* Snumtag){
+    int sum = 0;
+    for(int i = 0; line[i] != '\0'; i++){
+        int cnt = 0;
+        if(!(line[i] == 'W' || line[i] == 'E' || line[i] == 'S' || (line[i] >= '0' && line[i] <= '9'))){
+            *unknown = 1;
+        }
+        if(line[i] >= 'A' && line[i] <= 'Z'){
+            char tmp = line[i];
+            i++;
+            while(line[i] >= '0' && line[i] <= '9'){
+                cnt = cnt * 10 + line[i] - '0';
+                i++;
+            }
+            i--;
+            if(tmp == 'S'){
+                *Snum += cnt;
+            } 
+        }
+        sum += cnt;
+
+    }
+    if(sum != width){
+        *wwrong = 1;
+    }
+    int col = 0;
+    for(int i = 0; line[i] != '\0'; i++){
+        int cnt = 0;
+
+        if(line[i] == 'W' || line[i] == 'E' || line[i] == 'S'){
+            char fill = line[i];
+                        i++;
+            while(line[i] >= '0' && line[i] <= '9'){
+                cnt = cnt * 10 + line[i] - '0';
+                i++;
+            }
+            i--;
+            while(cnt--){
+                if(fill == 'W'){
+                    cells_p[row * width + col] = FLAG_WALL;
+                } else if(fill == 'E'){
+                    cells_p[row * width + col] = FLAG_PLAIN_CELL;
+                } else if(!*Snumtag){
+                    cells_p[row * width + col] = FLAG_SNAKE;
+                    int* data = malloc(sizeof(int));
+                    *data = row * width + col;
+                    snake_p->head_pos->data = data;
+                    snake_p->head_pos->next = NULL;
+                    snake_p->head_pos->prev = NULL;
+                    *Snumtag = 1;
+                }
+                col++;
+            }
+        }
+    }
+}
 enum board_init_status decompress_board_str(int** cells_p, size_t* width_p,
                                             size_t* height_p, snake_t* snake_p,
                                             char* compressed) {
-    // TODO: implement!
-    return INIT_UNIMPLEMENTED;
+    int Bwidth = 0;
+    int Bheight = 0;
+    int Snum = 0;
+    const char s1[2] = "|";
+    int choose = 0;
+    for(int i = 0; compressed[i] != '|'; i++){
+        if(compressed[i] >= '0' && compressed[i] <= '9' && !choose){
+            Bheight = Bheight * 10 + compressed[i] - '0';
+        }
+        if(compressed[i] == 'x')
+            choose = 1;
+        if(compressed[i] >= '0' && compressed[i] <= '9' && choose){
+            Bwidth = Bwidth * 10 + compressed[i] - '0';
+        }
+    }
+    *width_p = Bwidth;
+    *height_p = Bheight;
+    *cells_p = malloc(Bwidth * Bheight * sizeof(int));
+    char* token = strtok(compressed, s1);
+    int row = 0;
+    int wwrong = 0;
+    int unknown = 0;
+    int Snumtag = 0;
+    while(row < Bheight){
+
+        token = strtok(NULL, s1);
+        if(token == NULL){
+            return INIT_ERR_INCORRECT_DIMENSIONS;    
+        }
+        helper(snake_p, Bwidth, token, &Snum, &wwrong, &unknown, *cells_p, row, &Snumtag);
+        
+        row++;
+    }
+    if(!Snumtag){
+        int* data = malloc(sizeof(int));
+        *data = 0;
+        snake_p->head_pos->data = data;
+        snake_p->head_pos->next = NULL;
+        snake_p->head_pos->prev = NULL;           
+    }
+    if(wwrong){
+        return INIT_ERR_INCORRECT_DIMENSIONS;
+    }
+    else if(unknown){
+        return INIT_ERR_BAD_CHAR;
+    }
+    if((token = strtok(NULL, s1)) != NULL){
+        return INIT_ERR_INCORRECT_DIMENSIONS;
+    }
+    if(Snum != 1){
+
+        return INIT_ERR_WRONG_SNAKE_NUM;
+    }
+    return INIT_SUCCESS;
 }
