@@ -2,7 +2,20 @@
 #include "dmalloc.hh"
 #include <cassert>
 #include <cstring>
+#include <map>
 
+std::map<void*, int> leakch;
+std::map<void*, bool> freed;
+static dmalloc_stats gls;
+/*
+leakch，存储所有ptr与line的键值对
+freed，存储所有ptr与freed的键值对
+(int*)ptr
+ptr-1指向size
+ptr-2指向是否被释放过 1是没有
+ptr-3指向是否被分配过 1是有
+ptr-4指向约定秘密值
+*/
 /**
  * dmalloc(sz,file,line)
  *      malloc() wrapper. Dynamically allocate the requested amount `sz` of memory and 
@@ -17,7 +30,33 @@
 void* dmalloc(size_t sz, const char* file, long line) {
     (void) file, (void) line;   // avoid uninitialized variable warnings
     // Your code here.
-    return base_malloc(sz);
+    char* ptr = (char*)base_malloc(sz + 17);
+    if(!ptr || sz > ((unsigned int)(-1)>>1)){
+        gls.nfail++;
+        gls.fail_size += sz;
+        return nullptr;
+    }
+    void* ret = ptr + 16;
+    gls.nactive++;
+    gls.ntotal++;
+    gls.total_size += sz;
+    gls.active_size += sz;
+    int*  data = (int*)ptr;
+    *(data + 3) = sz;       //allocated size
+    *(data + 2) = 1;        //freed
+    *(data + 1) = 1;        //allocated
+    leakch[ret] = line;
+    *(data) = 0xfc;         //secret value
+    *((char*)ret + sz) = *(data);
+    
+    if(gls.heap_max < (uintptr_t) ((char*)ret + sz)){
+        gls.heap_max = (uintptr_t) ((char*)ret + sz);     
+    }
+    if(!gls.heap_min || gls.heap_min > (uintptr_t) ret ){
+        gls.heap_min = (uintptr_t) ret;
+    }
+
+    return ret;
 }
 
 /**
@@ -32,6 +71,43 @@ void* dmalloc(size_t sz, const char* file, long line) {
 void dfree(void* ptr, const char* file, long line) {
     (void) file, (void) line;   // avoid uninitialized variable warnings
     // Your code here.
+    if(!ptr){
+        return;
+    }
+    if((uintptr_t) ptr > gls.heap_max || (uintptr_t) ptr < gls.heap_min){
+        fprintf(stderr, "MEMORY BUG???: invalid free of pointer %p, not in heap\n", ptr);    
+        abort();
+    }
+    int* data = (int*)ptr;
+    if(!(*(data - 3))){
+        fprintf(stderr, "MEMORY BUG: test???.cc:%ld: invalid free of pointer %p, not allocated\n", line, ptr);
+        for(auto p = leakch.cbegin(); p != leakch.cend(); ++p) {
+            int* key = (int*)p->first;
+            char* step = (char*)p->first;
+            if((uintptr_t)ptr > (uintptr_t)step && (uintptr_t)ptr < (uintptr_t)(step + *(key - 1))){
+                fprintf(stderr, "test???.cc:%d: %p is %ld bytes inside a %d byte region allocated here", leakch[key], ptr, ((uintptr_t)ptr - (uintptr_t)step), *(key - 1));
+            }
+        }
+        abort();
+    }
+    int allocated = leakch.count(ptr);
+    if(!allocated){
+        fprintf(stderr, "MEMORY BUG: test???.cc:%ld: invalid free of pointer %p, not allocated\n", line, ptr);
+        abort();
+    }
+    if(!(*(data - 2)) || freed[ptr]){
+        fprintf(stderr, "MEMORY BUG???: invalid free of pointer %p, double free\n", ptr);
+        abort();
+    }
+    
+    if(*((char*)ptr + *(data - 1))!= (char)*(data - 4)){
+        fprintf(stderr, "MEMORY BUG???: detected wild write during free of pointer %p\n", ptr);
+        abort();
+    }
+    gls.nactive--;
+    *(data - 2) = 0;
+    freed[ptr] = 1;
+    gls.active_size -= *(data - 1);
     base_free(ptr);
 }
 
@@ -50,6 +126,10 @@ void dfree(void* ptr, const char* file, long line) {
  */
 void* dcalloc(size_t nmemb, size_t sz, const char* file, long line) {
     // Your code here (to fix test014).
+    if(nmemb > ((unsigned int)(-1)>>1) || sz > ((unsigned int)(-1)>>1)){
+        gls.nfail++;
+        return nullptr;
+    }
     void* ptr = dmalloc(nmemb * sz, file, line);
     if (ptr) {
         memset(ptr, 0, nmemb * sz);
@@ -66,7 +146,9 @@ void* dcalloc(size_t nmemb, size_t sz, const char* file, long line) {
 void get_statistics(dmalloc_stats* stats) {
     // Stub: set all statistics to enormous numbers
     memset(stats, 255, sizeof(dmalloc_stats));
+
     // Your code here.
+    memcpy(stats, &gls, sizeof(dmalloc_stats));
 }
 
 /**
@@ -90,4 +172,10 @@ void print_statistics() {
  */
 void print_leak_report() {
     // Your code here.
+    for(auto p = leakch.cbegin(); p != leakch.cend(); ++p) {
+        int* key = (int*)p->first;
+        if(*(key - 2)){
+            printf("LEAK CHECK: test???.cc:%d: allocated object %p with size %d\n",leakch[key], key, *(key - 1));
+        }
+    }
 }

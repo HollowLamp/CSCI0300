@@ -91,7 +91,7 @@ void place_food(int* cells, size_t width, size_t height) {
         place_food(cells, width, height);
     }
     /* DO NOT MODIFY THIS FUNCTION */
-}
+
 
 /** Prompts the user for their name and saves it in the given buffer.
  * Arguments:
